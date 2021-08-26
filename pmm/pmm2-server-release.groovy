@@ -58,7 +58,7 @@ pipeline {
                             ls /srv/repo-copy/pmm2-components/yum/${UPDATER_REPO}/7/RPMS/x86_64 \
                             > repo.list
                         cat rpms.list \
-                            | grep -v 'pmm2-client' \
+                            | grep -v 'pmm2-client' | grep pmm-update \
                             | sed -e 's/[^A-Za-z0-9\\._+-]//g' \
                             | xargs -n 1 -I {} grep "^{}.rpm" repo.list \
                             | sort \
@@ -122,6 +122,7 @@ pipeline {
                         echo ${GITHUB_API_TOKEN} > GITHUB_API_TOKEN
                         echo ${VERSION} > VERSION
                     """
+                    sh "exit 1"
                     sh '''
                         set -ex
                         export VERSION=$(cat VERSION)
