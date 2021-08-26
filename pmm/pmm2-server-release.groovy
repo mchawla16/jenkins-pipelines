@@ -38,124 +38,12 @@ pipeline {
             name: 'VERSION')
     }
     stages {
-        stage('Get Docker RPMs') {
-            agent {
-                label 'min-centos-7-x64'
-            }
-            steps {
-                installDocker()
-                slackSend botUser: true, channel: '#pmm-ci', color: '#FFFF00', message: "[${specName}]: build started - ${BUILD_URL}"
-                sh "sg docker -c 'docker run ${DOCKER_VERSION} /usr/bin/rpm -qa' > rpms.list"
-                stash includes: 'rpms.list', name: 'rpms'
-            }
-        }
-        stage('Get repo RPMs') {
-            steps {
-                unstash 'rpms'
-                withCredentials([sshUserPrivateKey(credentialsId: 'repo.ci.percona.com', keyFileVariable: 'KEY_PATH', usernameVariable: 'USER')]) {
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no -i ${KEY_PATH} ${USER}@repo.ci.percona.com \
-                            ls /srv/repo-copy/pmm2-components/yum/${UPDATER_REPO}/7/RPMS/x86_64 \
-                            > repo.list
-                        cat rpms.list \
-                            | grep -v 'pmm2-client' | grep pmm-update \
-                            | sed -e 's/[^A-Za-z0-9\\._+-]//g' \
-                            | xargs -n 1 -I {} grep "^{}.rpm" repo.list \
-                            | sort \
-                            | tee copy.list
-                    '''
-                }
-                stash includes: 'copy.list', name: 'copy'
-                archiveArtifacts 'copy.list'
-            }
-        }
-// Publish RPMs to repo.ci.percona.com
-        stage('Copy RPMs to PMM repo') {
-            steps {
-                unstash 'copy'
-                withCredentials([sshUserPrivateKey(credentialsId: 'repo.ci.percona.com', keyFileVariable: 'KEY_PATH', usernameVariable: 'USER')]) {
-                    sh '''
-                        cat copy.list | ssh -o StrictHostKeyChecking=no -i ${KEY_PATH} ${USER}@repo.ci.percona.com \
-                            "cat - | xargs -I{} cp -v /srv/repo-copy/pmm2-components/yum/${UPDATER_REPO}/7/RPMS/x86_64/{} /srv/repo-copy/pmm2-components/yum/release/7/RPMS/x86_64/{}"
-                    '''
-                }
-            }
-        }
-        stage('Createrepo') {
-            steps {
-                withCredentials([string(credentialsId: 'SIGN_PASSWORD', variable: 'SIGN_PASSWORD')]) {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'repo.ci.percona.com', keyFileVariable: 'KEY_PATH', usernameVariable: 'USER')]) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no -i ${KEY_PATH} ${USER}@repo.ci.percona.com " \
-                            createrepo --update /srv/repo-copy/pmm2-components/yum/release/7/RPMS/x86_64/
-                            if [ -f /srv/repo-copy/pmm2-components/yum/release/7/RPMS/x86_64/repodata/repomd.xml.asc ]; then
-                                rm -f /srv/repo-copy/pmm2-components/yum/release/7/RPMS/x86_64/repodata/repomd.xml.asc
-                            fi
-                            export SIGN_PASSWORD=\${SIGN_PASSWORD}
-                            gpg --detach-sign --armor --passphrase \${SIGN_PASSWORD} /srv/repo-copy/pmm2-components/yum/release/7/RPMS/x86_64/repodata/repomd.xml
-                        "
-                    """
-                    }
-                }
-            }
-        }
-// Publish RPMs to repo.percona.com
-        stage('Publish RPMs') {
-            steps {
-                withCredentials([sshUserPrivateKey(credentialsId: 'repo.ci.percona.com', keyFileVariable: 'KEY_PATH', usernameVariable: 'USER')]) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no -i ${KEY_PATH} ${USER}@repo.ci.percona.com "
-                            rsync -avt --bwlimit=50000 --delete --progress --exclude=rsync-* --exclude=*.bak \
-                                /srv/repo-copy/pmm2-components/yum/release \
-                                10.10.9.209:/www/repo.percona.com/htdocs/pmm2-components/yum/
-                            bash +x /usr/local/bin/clear_cdn_cache.sh
-                        "
-                    """
-                }
-            }
-        }
         stage('Set Tags') {
             steps {
                 withCredentials([string(credentialsId: 'GITHUB_API_TOKEN', variable: 'GITHUB_API_TOKEN')]) {
-                    unstash 'copy'
                     sh """
-                        echo ${GITHUB_API_TOKEN} > GITHUB_API_TOKEN
                         echo ${VERSION} > VERSION
                     """
-                    sh "exit 1"
-                    sh '''
-                        set -ex
-                        export VERSION=$(cat VERSION)
-                        export TOP_VER=$(cat VERSION | cut -d. -f1)
-                        export MID_VER=$(cat VERSION | cut -d. -f2)
-                        export DOCKER_MID="$TOP_VER.$MID_VER"
-                        declare -A repo=(
-                            ["percona-dashboards"]="percona/grafana-dashboards"
-                            ["pmm-server"]="percona/pmm-server"
-                            ["percona-qan-api2"]="percona/qan-api2"
-                            ["pmm-update"]="percona/pmm-update"
-                            ["pmm-managed"]="percona/pmm-managed"
-                        )
-
-                        for package in "${!repo[@]}"; do
-                            SHA=$(
-                                grep "^$package-$VERSION-" copy.list \
-                                    | perl -p -e 's/.*[.]\\d{10}[.]([0-9a-f]{7})[.]el7.*/$1/'
-                            )
-                            if [[ -n "$package" ]] && [[ -n "$SHA" ]]; then
-                                rm -fr $package
-                                mkdir $package
-                                pushd $package >/dev/null
-                                    git clone https://github.com/${repo["$package"]} ./
-                                    git checkout $SHA
-                                    FULL_SHA=$(git rev-parse HEAD)
-
-                                    echo "$FULL_SHA"
-                                    echo "$VERSION"
-                                popd >/dev/null
-                            fi
-                        done
-                    '''
                 }
                 stash includes: 'VERSION', name: 'version_file'
             }
@@ -385,34 +273,10 @@ pipeline {
                 }
             }
         }
-        stage('Refresh website part 2') {
-            agent {
-                label 'virtualbox'
-            }
-            steps {
-                sh """
-                    until curl https://www.percona.com/admin/config/percona/percona_downloads/crawl_directory > /tmp/crawler; do
-                        tail /tmp/crawler
-                        sleep 10
-                    done
-                    tail /tmp/crawler
-                """
-            }
-        }
     }
     post {
         always {
             deleteDir()
-        }
-        success {
-            unstash 'copy'
-            script {
-                def IMAGE = sh(returnStdout: true, script: "cat copy.list").trim()
-                slackSend botUser: true, channel: '#pmm-ci', color: '#00FF00', message: "[${specName}]: build finished - ${IMAGE}"
-            }
-        }
-        failure {
-            slackSend botUser: true, channel: '#pmm-ci', color: '#FF0000', message: "[${specName}]: build failed"
         }
     }
 }
