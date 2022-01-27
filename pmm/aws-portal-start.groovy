@@ -46,6 +46,10 @@ pipeline {
             defaultValue: '1',
             description: 'Stop the instance after, days ("0" value disables autostop and recreates instance in case of AWS failure)',
             name: 'DAYS')
+        choice(
+            name: 'NOTIFY',
+            choices: ['PM', 'channel', 'disable'],
+            description: '')
         string(
             defaultValue: 'true',
             description: 'notify',
@@ -250,7 +254,7 @@ EOF
         }
         success {
             script {
-                if ("${NOTIFY}" == "true") {
+                if ("${NOTIFY}" != "disable") {
                     def OWNER_FULL = sh(returnStdout: true, script: "cat OWNER_FULL").trim()
                     def OWNER_EMAIL = sh(returnStdout: true, script: "cat OWNER_EMAIL").trim()
                     def OWNER_SLACK = slackUserIdFromEmail(botUser: true, email: "${OWNER_EMAIL}", tokenCredentialId: 'JenkinsCI-SlackBot-v2')
@@ -263,9 +267,11 @@ EOF
 4. to allow accessing the unstance for another person please run this command in terminal
 ```ssh ec2-user@${env.IP} 'echo "NEW_PERSON_SSH_KEY" >> ~/.ssh/authorized_keys'```
 *Note new user should also execute through 1-2 steps*"""
-
-                    slackSend botUser: true, channel: '#pmm-ci', color: '#FF0000', message: "${SLACK_MESSAGE}"
-                    slackSend botUser: true, channel: "@${OWNER_SLACK}", color: '#00FF00', message: "${SLACK_MESSAGE}"
+                    if ("${NOTIFY}" == "PM") {
+                        slackSend botUser: true, channel: "@${OWNER_SLACK}", color: '#00FF00', message: "${SLACK_MESSAGE}"
+                    } else {
+                        slackSend botUser: true, channel: '#pmm-ci', color: '#FF0000', message: "${SLACK_MESSAGE}"
+                    }
                 }
             }
         }
@@ -281,13 +287,15 @@ EOF
                 '''
             }
             script {
-                if ("${NOTIFY}" == "true") {
+                if ("${NOTIFY}" != "disable") {
                     def OWNER_FULL = sh(returnStdout: true, script: "cat OWNER_FULL").trim()
                     def OWNER_EMAIL = sh(returnStdout: true, script: "cat OWNER_EMAIL").trim()
                     def OWNER_SLACK = slackUserIdFromEmail(botUser: true, email: "${OWNER_EMAIL}", tokenCredentialId: 'JenkinsCI-SlackBot-v2')
-
-                    slackSend botUser: true, channel: '#pmm-ci', color: '#FF0000', message: "[${JOB_NAME}]: build failed"
-                    slackSend botUser: true, channel: "@${OWNER_SLACK}", color: '#FF0000', message: "[${JOB_NAME}]: build failed"
+                    if ("${NOTIFY}" == "PM") {
+                        slackSend botUser: true, channel: '#pmm-ci', color: '#FF0000', message: "[${JOB_NAME}]: build failed"
+                    } else {
+                        slackSend botUser: true, channel: "@${OWNER_SLACK}", color: '#FF0000', message: "[${JOB_NAME}]: build failed"
+                    }
                 }
             }
         }
