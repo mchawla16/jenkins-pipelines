@@ -50,10 +50,6 @@ pipeline {
             name: 'NOTIFY',
             choices: ['PM', 'channel', 'disable'],
             description: '')
-        string(
-            defaultValue: 'true',
-            description: 'notify',
-            name: 'NOTIFY')
     }
 
     environment {
@@ -270,7 +266,7 @@ EOF
                     if ("${NOTIFY}" == "PM") {
                         slackSend botUser: true, channel: "@${OWNER_SLACK}", color: '#00FF00', message: "${SLACK_MESSAGE}"
                     } else {
-                        slackSend botUser: true, channel: '#pmm-ci', color: '#FF0000', message: "${SLACK_MESSAGE}"
+                        slackSend botUser: true, channel: '#pmm-ci', color: '#00FF00', message: "${SLACK_MESSAGE}"
                     }
                 }
             }
