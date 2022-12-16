@@ -35,6 +35,10 @@ pipeline {
             choices: ['v1.11.0', 'none', 'v1.8.0', 'v1.9.0', 'v1.10.0', 'v1.12.0'], //set v1.11.0 as default temporarily until PMM-10012 is fixed
             description: 'Select version of PSMDB operator',
             name: 'PSMDB_OPERATOR_VERSION')                    
+        choice(
+            choices: ['minikube', 'eks'],
+            description: 'Select type of cluster',
+            name: 'CLUSTER_TYPE')
         string(
             defaultValue: 'true',
             description: 'Enable Slack notification (option for high level pipelines)',
@@ -114,18 +118,41 @@ pipeline {
                 }
             }
         }
-        stage('Setup Minikube') {
+        stage('Setup Cluster') {
             steps {
                 script {
                     withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
                         node(env.VM_NAME){
-                            sh """
-                                set -o errexit
-                                set -o xtrace
-                                sudo yum -y install curl
-                                /srv/pmm-qa/pmm-tests/install_k8s_tools.sh --minikube --kubectl --sudo
-                                sleep 5
-                            """
+                            if ( ${CLUSTER_TYPE} == 'minikube' ) {
+                                sh """
+                                    set -o errexit
+                                    set -o xtrace
+                                    sudo yum -y install curl
+                                    /srv/pmm-qa/pmm-tests/install_k8s_tools.sh --minikube --kubectl --sudo
+                                    sleep 5
+                                """
+                            }
+                            if ( ${CLUSTER_TYPE} == 'eks' ) {
+                                sh """
+                                    if [ ! -d $HOME/google-cloud-sdk/bin ]; then
+                                        rm -rf $HOME/google-cloud-sdk
+                                        curl https://sdk.cloud.google.com | bash
+                                    fi
+
+                                    source $HOME/google-cloud-sdk/path.bash.inc
+                                    gcloud components update kubectl
+                                    gcloud version
+
+                                    curl -s https://get.helm.sh/helm-v3.9.4-linux-amd64.tar.gz \
+                                    | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
+
+                                    sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.27.2/yq_linux_amd64 > /usr/local/bin/yq"
+                                    sudo chmod +x /usr/local/bin/yq
+
+                                    curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+                                    sudo mv -v /tmp/eksctl /usr/local/bin
+                                """
+                            }
                         }
                     }
                 }
@@ -136,23 +163,25 @@ pipeline {
                 script {
                     withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
                         node(env.VM_NAME){
-                            sh """
-                                set -o errexit
-                                set -o xtrace
-                                export PATH=\$PATH:/usr/sbin
-                                minikube version
-                                rm ~/.kube/config && minikube delete
-                                minikube config set cpus 8
-                                minikube config set memory 29000
-                                minikube config set kubernetes-version ${KUBE_VERSION}
-                                export CHANGE_MINIKUBE_NONE_USER=true
-                                sudo yum install -y conntrack
-                                minikube start --driver=none
-                                sudo chown -R $USER $HOME/.kube $HOME/.minikube
-                                sed -i s:/root:$HOME:g $HOME/.kube/config
-                                bash /srv/pmm-qa/pmm-tests/minikube_operators_setup.sh ${PXC_OPERATOR_VERSION} ${PSMDB_OPERATOR_VERSION}
-                                sleep 10
-                            """
+                            if ( ${CLUSTER_TYPE} == 'minikube' ) {
+                                sh """
+                                    set -o errexit
+                                    set -o xtrace
+                                    export PATH=\$PATH:/usr/sbin
+                                    minikube version
+                                    rm ~/.kube/config && minikube delete
+                                    minikube config set cpus 8
+                                    minikube config set memory 29000
+                                    minikube config set kubernetes-version ${KUBE_VERSION}
+                                    export CHANGE_MINIKUBE_NONE_USER=true
+                                    sudo yum install -y conntrack
+                                    minikube start --driver=none
+                                    sudo chown -R $USER $HOME/.kube $HOME/.minikube
+                                    sed -i s:/root:$HOME:g $HOME/.kube/config
+                                    bash /srv/pmm-qa/pmm-tests/minikube_operators_setup.sh ${PXC_OPERATOR_VERSION} ${PSMDB_OPERATOR_VERSION}
+                                    sleep 10
+                                """
+                            }
                         }
                     }
                 }
