@@ -123,7 +123,7 @@ pipeline {
                 script {
                     withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
                         node(env.VM_NAME){
-                            if ( ${CLUSTER_TYPE} == 'minikube' ) {
+                            if ( "${CLUSTER_TYPE}" == "minikube" ) {
                                 sh """
                                     set -o errexit
                                     set -o xtrace
@@ -132,7 +132,7 @@ pipeline {
                                     sleep 5
                                 """
                             }
-                            if ( ${CLUSTER_TYPE} == 'eks' ) {
+                            if ( "${CLUSTER_TYPE}" == "eks" ) {
                                 sh """
                                     if [ ! -d $HOME/google-cloud-sdk/bin ]; then
                                         rm -rf $HOME/google-cloud-sdk
@@ -163,7 +163,7 @@ pipeline {
                 script {
                     withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
                         node(env.VM_NAME){
-                            if ( ${CLUSTER_TYPE} == 'minikube' ) {
+                            if ( "${CLUSTER_TYPE}" == "minikube" ) {
                                 sh """
                                     set -o errexit
                                     set -o xtrace
