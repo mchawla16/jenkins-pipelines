@@ -134,20 +134,8 @@ pipeline {
                             }
                             if ( "${CLUSTER_TYPE}" == "eks" ) {
                                 sh """
-                                    if [ ! -d $HOME/google-cloud-sdk/bin ]; then
-                                        rm -rf $HOME/google-cloud-sdk
-                                        curl https://sdk.cloud.google.com | bash
-                                    fi
-
-                                    source $HOME/google-cloud-sdk/path.bash.inc
-                                    gcloud components update kubectl
-                                    gcloud version
-
-                                    curl -s https://get.helm.sh/helm-v3.9.4-linux-amd64.tar.gz \
-                                    | sudo tar -C /usr/local/bin --strip-components 1 -zvxpf -
-
-                                    sudo sh -c "curl -s -L https://github.com/mikefarah/yq/releases/download/v4.27.2/yq_linux_amd64 > /usr/local/bin/yq"
-                                    sudo chmod +x /usr/local/bin/yq
+                                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                                    sudo install kubectl /usr/local/bin/kubectl
 
                                     curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp
                                     sudo mv -v /tmp/eksctl /usr/local/bin
@@ -181,6 +169,48 @@ pipeline {
                                     bash /srv/pmm-qa/pmm-tests/minikube_operators_setup.sh ${PXC_OPERATOR_VERSION} ${PSMDB_OPERATOR_VERSION}
                                     sleep 10
                                 """
+                            }
+                            if ( "${CLUSTER_TYPE}" == "eks" ) {
+                                sh '''
+cat <<-EOF > cluster.yaml
+# An example of ClusterConfig showing nodegroups with mixed instances (spot and on demand):
+---
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+    name: eks-pxc-cluster
+    region: eu-west-3
+iam:
+  withOIDC: true
+
+addons:
+- name: aws-ebs-csi-driver
+  wellKnownPolicies:
+    ebsCSIController: true
+
+nodeGroups:
+    - name: ng-1
+      minSize: 3
+      maxSize: 5
+      instancesDistribution:
+        maxPrice: 0.15
+        instanceTypes: ["m5.xlarge", "m5.2xlarge"] # At least two instance types should be specified
+        onDemandBaseCapacity: 0
+        onDemandPercentageAboveBaseCapacity: 50
+        spotInstancePools: 2
+      tags:
+        'iit-billing-tag': 'jenkins-eks'
+EOF                                
+                                '''
+                                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'pmm-staging-slave', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
+                                     sh """
+                                         export PATH=/home/ec2-user/.local/bin:$PATH
+                                         eksctl create cluster -f cluster.yaml
+                                         bash /srv/pmm-qa/pmm-tests/minikube_operators_setup.sh ${PXC_OPERATOR_VERSION} ${PSMDB_OPERATOR_VERSION}
+                                         sleep 10
+                                     """
+                                }
                             }
                         }
                     }
