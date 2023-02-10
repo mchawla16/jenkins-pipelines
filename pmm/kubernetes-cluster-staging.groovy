@@ -134,7 +134,7 @@ pipeline {
                             }
                             if ( "${CLUSTER_TYPE}" == "eks" ) {
                                 sh """
-                                    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                                    curl -LO "https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                                     sudo install kubectl /usr/local/bin/kubectl
 
                                     curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_Linux_amd64.tar.gz" | tar xz -C /tmp
