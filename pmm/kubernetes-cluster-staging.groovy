@@ -200,7 +200,7 @@ nodeGroups:
         spotInstancePools: 2
       tags:
         'iit-billing-tag': 'jenkins-eks'
-EOF                                
+EOF
                                 '''
 
                                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'pmm-staging-slave', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
