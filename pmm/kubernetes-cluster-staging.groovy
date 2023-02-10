@@ -173,7 +173,6 @@ pipeline {
                             if ( "${CLUSTER_TYPE}" == "eks" ) {
                                 sh '''
 cat <<-EOF > cluster.yaml
-# An example of ClusterConfig showing nodegroups with mixed instances (spot and on demand):
 ---
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
@@ -203,6 +202,7 @@ nodeGroups:
         'iit-billing-tag': 'jenkins-eks'
 EOF                                
                                 '''
+
                                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'pmm-staging-slave', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
                                      sh """
                                          export PATH=/home/ec2-user/.local/bin:$PATH
