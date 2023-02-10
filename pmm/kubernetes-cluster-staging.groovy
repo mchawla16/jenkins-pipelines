@@ -206,6 +206,9 @@ EOF
                                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', accessKeyVariable: 'AWS_ACCESS_KEY_ID', credentialsId: 'pmm-staging-slave', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY']]) {
                                      sh """
                                          export PATH=/home/ec2-user/.local/bin:$PATH
+                                         if ! kubectl get pods 2>&1 |grep "No resources"; then
+                                                 eksctl delete cluster --region=eu-west-3 --name=eks-pxc-cluster
+                                         fi
                                          eksctl create cluster -f cluster.yaml
                                          bash /srv/pmm-qa/pmm-tests/minikube_operators_setup.sh ${PXC_OPERATOR_VERSION} ${PSMDB_OPERATOR_VERSION}
                                          sleep 10
