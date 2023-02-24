@@ -178,7 +178,7 @@ apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
 metadata:
-    name: eks-pmm-cluster
+    name: eks-pmm
     region: eu-west-3
 iam:
   withOIDC: true
